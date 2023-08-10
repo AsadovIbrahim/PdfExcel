@@ -100,7 +100,6 @@ public class PdfFile<T>
         document.Add(list);
 
 
-
         // Close the document
         document.Close();
 
@@ -114,6 +113,8 @@ public class PdfFile<T>
 public interface ITableActionCommand
 {
     void Execute();
+    void ExecuteInZip();
+
 }
 
 
@@ -131,12 +132,34 @@ public class CreateExcelTableActionCommand<T> : ITableActionCommand
         MemoryStream excelMemoryStream = _excelFile.Create();
         File.WriteAllBytes(_excelFile.FileName, excelMemoryStream.ToArray());
     }
+
+    public void ExecuteInZip()
+    {
+        using (MemoryStream zipMemoryStream = _excelFile.Create())
+        {
+            using (ZipArchive archive = new ZipArchive(zipMemoryStream, ZipArchiveMode.Create, true))
+            {
+                var memoryStream = zipMemoryStream;
+                string entryName = _excelFile.FileName;
+                ZipArchiveEntry entry = archive.CreateEntry(entryName);
+                using (Stream entryStream = entry.Open())
+                {
+                    memoryStream.Seek(0, SeekOrigin.Begin);
+                    memoryStream.CopyTo(entryStream);
+                }
+            }
+            File.WriteAllBytes("files.zip", zipMemoryStream.ToArray());
+        }
+    }
+
 }
 
 
 
 
 //// Homework
+
+
 public class CreatePdfTableActionCommand<T> : ITableActionCommand
 {
     private readonly PdfFile<T> _pdfFile;
@@ -150,6 +173,24 @@ public class CreatePdfTableActionCommand<T> : ITableActionCommand
     {
         MemoryStream pdfMemoryStream = _pdfFile.Create();
         File.WriteAllBytes(_pdfFile.FileName, pdfMemoryStream.ToArray());
+    }
+    public void ExecuteInZip()
+    {
+        using (MemoryStream zipMemoryStream = _pdfFile.Create())
+        {
+            using (ZipArchive archive = new ZipArchive(zipMemoryStream, ZipArchiveMode.Create, true))
+            {
+                var memoryStream = zipMemoryStream;
+                string entryName = _pdfFile.FileName;
+                ZipArchiveEntry entry = archive.CreateEntry(entryName);
+                using (Stream entryStream = entry.Open())
+                {
+                    memoryStream.Seek(0, SeekOrigin.Begin);
+                    memoryStream.CopyTo(entryStream);
+                }
+            }
+            File.WriteAllBytes("files.zip", zipMemoryStream.ToArray());
+        }
     }
 }
 
@@ -177,39 +218,38 @@ class FileCreateInvoker
     {
         _tableActionCommand.Execute();
     }
-
     public void CreateFiles()
     {
-        throw new NotImplementedException();
-        // ZipArchive
-    }
+        foreach (var tableActionCommand in tableActionCommands)
+        {
+            tableActionCommand.ExecuteInZip();
+        }
 }
-
-
-class Program
-{
-    static void Main()
+    class Program
     {
+        static void Main()
+        {
 
-        var products = Enumerable.Range(1, 30).Select(index =>
-            new Product
-            {
-                Id = index,
-                Name = $"Product {index}",
-                Price = index + 100,
-                Stock = index
-            }
-        ).ToList();
-
-
-
-        PdfFile<Product> reciever = new(products);
-        ExcelFile<Product> receiver = new(products);
+            var products = Enumerable.Range(1, 30).Select(index =>
+                new Product
+                {
+                    Id = index,
+                    Name = $"Product {index}",
+                    Price = index + 100,
+                    Stock = index
+                }
+            ).ToList();
 
 
-        FileCreateInvoker invoker = new();
-        invoker.SetCommand(new CreateExcelTableActionCommand<Product>(receiver));
-        invoker.SetCommand(new CreatePdfTableActionCommand<Product>(reciever));
-        invoker.CreateFile();
+
+            PdfFile<Product> reciever = new(products);
+            ExcelFile<Product> receiver = new(products);
+
+
+            FileCreateInvoker invoker = new();
+            invoker.AddCommand(new CreateExcelTableActionCommand<Product>(receiver));
+            //invoker.AddCommand(new CreatePdfTableActionCommand<Product>(reciever));
+            invoker.CreateFiles();
+        }
     }
 }
